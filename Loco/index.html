@@ -1,0 +1,1538 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HADAL 3D - Projeto Carcinização</title>
+    <style>
+        :root {
+            --bg: #0a0a0a;
+            --text: #c8c8c8;
+            --blood: #8b0000;
+            --blood-bright: #cc1111;
+            --terminal-green: #2ecc71;
+            --dark-red: #3a0a0a;
+            --glitch-blue: #0066ff;
+            --glitch-red: #ff0044;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            font-family: 'Courier New', 'Consolas', monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #game-wrapper {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #game-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        #scanlines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.15) 0px, rgba(0, 0, 0, 0.15) 1px, transparent 1px, transparent 3px);
+        }
+
+        #vignette {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.7) 100%);
+            box-shadow: inset 0 0 100px 40px rgba(0, 0, 0, 0.8);
+        }
+
+        #blood-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            transition: opacity 0.3s;
+            background: radial-gradient(ellipse at 30% 40%, rgba(139, 0, 0, 0.4) 0%, rgba(100, 0, 0, 0.2) 30%, transparent 60%), radial-gradient(ellipse at 70% 60%, rgba(80, 0, 0, 0.3) 0%, transparent 50%);
+        }
+
+        #blood-overlay.active {
+            opacity: 1;
+        }
+
+        #blood-overlay.intense {
+            opacity: 1;
+            background: radial-gradient(ellipse at center, rgba(180, 0, 0, 0.6) 0%, rgba(120, 0, 0, 0.4) 25%, rgba(60, 0, 0, 0.2) 50%, transparent 70%);
+            animation: bloodPulse 1.5s infinite;
+        }
+
+        @keyframes bloodPulse {
+
+            0%,
+            100% {
+                opacity: 0.7;
+            }
+
+            50% {
+                opacity: 1;
+            }
+        }
+
+        #glitch-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            background: transparent;
+            transition: opacity 0.1s;
+        }
+
+        #glitch-overlay.active {
+            opacity: 1;
+            animation: glitchFlash 0.15s infinite;
+        }
+
+        @keyframes glitchFlash {
+            0% {
+                background: rgba(255, 0, 68, 0.15);
+                transform: translateX(3px);
+            }
+
+            25% {
+                background: rgba(0, 102, 255, 0.15);
+                transform: translateX(-3px);
+            }
+
+            50% {
+                background: rgba(255, 0, 68, 0.1);
+                transform: translateX(-1px);
+            }
+
+            75% {
+                background: rgba(0, 255, 100, 0.1);
+                transform: translateX(2px);
+            }
+
+            100% {
+                background: rgba(255, 0, 68, 0.15);
+                transform: translateX(3px);
+            }
+        }
+
+        #hud {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: #999;
+            font-size: 0.8em;
+            letter-spacing: 2px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 15px;
+            border: 1px solid #1a1a1a;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            pointer-events: auto;
+        }
+
+        #sanity-bar-outer {
+            width: 120px;
+            height: 8px;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            overflow: hidden;
+        }
+
+        #sanity-bar-inner {
+            height: 100%;
+            background: linear-gradient(90deg, #8b0000, #cc3333, #ff6666);
+            transition: width 0.8s;
+            box-shadow: 0 0 8px rgba(200, 0, 0, 0.5);
+        }
+
+        #room-label {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #999;
+            font-size: 0.85em;
+            letter-spacing: 3px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 5px 15px;
+            border: 1px solid #1a1a1a;
+        }
+
+        #action-panel {
+            position: absolute;
+            top: 80px;
+            right: 20px;
+            width: 280px;
+            background: rgba(5, 5, 5, 0.9);
+            border: 1px solid #2a1a1a;
+            padding: 15px;
+            color: #aaa;
+            font-size: 0.8em;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: auto;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+
+        #room-description {
+            line-height: 1.6;
+        }
+
+        #room-description .highlight {
+            color: #cc4444;
+            text-shadow: 0 0 6px rgba(200, 0, 0, 0.3);
+        }
+
+        #room-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .action-btn {
+            padding: 7px 12px;
+            background: transparent;
+            border: 1px solid #2a1a1a;
+            color: #bb8888;
+            font-family: inherit;
+            font-size: 0.75em;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+        }
+
+        .action-btn:hover {
+            border-color: #6a2a2a;
+            color: #ff8888;
+            background: rgba(139, 0, 0, 0.1);
+            box-shadow: 0 0 12px rgba(139, 0, 0, 0.2);
+        }
+
+        .action-btn.danger {
+            border-color: #4a1010;
+            color: #dd5555;
+        }
+
+        .action-btn.danger:hover {
+            border-color: #8b0000;
+            color: #ff3333;
+            background: rgba(180, 0, 0, 0.2);
+            box-shadow: 0 0 20px rgba(200, 0, 0, 0.5);
+        }
+
+        .action-btn.disabled {
+            opacity: 0.3;
+            pointer-events: none;
+        }
+
+        #inventory-bar {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            gap: 8px;
+            pointer-events: auto;
+        }
+
+        .inv-slot {
+            padding: 6px 12px;
+            border: 1px solid #2a1a1a;
+            color: #776;
+            font-size: 0.7em;
+            cursor: pointer;
+            background: rgba(6, 6, 6, 0.8);
+            transition: all 0.3s;
+        }
+
+        .inv-slot.filled {
+            border-color: #5a3a1a;
+            color: #cc9944;
+        }
+
+        .inv-slot.filled:hover {
+            border-color: #aa7733;
+            color: #ffbb44;
+        }
+
+        #log-button {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: #666;
+            cursor: pointer;
+            font-size: 0.8em;
+            pointer-events: auto;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 5px 10px;
+            border: 1px solid #1a1a1a;
+        }
+
+        #log-button.has-new {
+            color: #cc4444;
+            animation: blinkLog 1s infinite;
+        }
+
+        @keyframes blinkLog {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.4;
+            }
+        }
+
+        #minimap {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 150px;
+            height: 150px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid #1a1a1a;
+            pointer-events: none;
+        }
+
+        /* Retículo */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            pointer-events: none;
+            z-index: 50;
+        }
+
+        #crosshair::before,
+        #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.5);
+            transition: background 0.2s;
+        }
+
+        #crosshair::before {
+            width: 2px;
+            height: 100%;
+            left: 9px;
+            top: 0;
+        }
+
+        #crosshair::after {
+            height: 2px;
+            width: 100%;
+            left: 0;
+            top: 9px;
+        }
+
+        #crosshair.interactive::before,
+        #crosshair.interactive::after {
+            background: #cc4444;
+            box-shadow: 0 0 5px #cc4444;
+        }
+
+        #log-modal {
+            position: absolute;
+            top: 5%;
+            left: 5%;
+            width: 90%;
+            height: 90%;
+            background: rgba(5, 5, 5, 0.97);
+            border: 2px solid #2a1a1a;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            box-shadow: 0 0 60px rgba(0, 0, 0, 0.95);
+            pointer-events: auto;
+        }
+
+        #log-modal h3 {
+            color: #cc4444;
+            letter-spacing: 3px;
+            margin-bottom: 15px;
+        }
+
+        #log-list {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .log-entry {
+            padding: 10px;
+            border: 1px solid #1a1a1a;
+            cursor: pointer;
+            color: #888;
+            transition: all 0.3s;
+            font-size: 0.8em;
+        }
+
+        .log-entry:hover {
+            border-color: #4a2a2a;
+            color: #cc8888;
+            background: rgba(139, 0, 0, 0.06);
+        }
+
+        .log-entry.read {
+            opacity: 0.5;
+        }
+
+        #log-content-display {
+            margin-top: 10px;
+            padding: 12px;
+            border: 1px solid #2a1a1a;
+            color: #aaa;
+            font-size: 0.8em;
+            line-height: 1.6;
+            min-height: 60px;
+            max-height: 150px;
+            overflow-y: auto;
+            background: #060606;
+        }
+
+        #log-close {
+            margin-top: 10px;
+            padding: 8px 20px;
+            background: transparent;
+            border: 1px solid #3a1a1a;
+            color: #888;
+            cursor: pointer;
+            font-family: inherit;
+            letter-spacing: 2px;
+        }
+
+        #log-close:hover {
+            border-color: #8b0000;
+            color: #cc4444;
+        }
+
+        #title-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 300;
+            pointer-events: auto;
+        }
+
+        #title-glitch {
+            font-size: 3.5em;
+            font-weight: bold;
+            color: var(--blood-bright);
+            text-shadow: 0 0 30px rgba(200, 0, 0, 0.8), 0 0 60px rgba(150, 0, 0, 0.5), 3px 3px 0 #0066ff, -3px -3px 0 #ff0044;
+            letter-spacing: 6px;
+            animation: titleGlitch 3s infinite;
+        }
+
+        @keyframes titleGlitch {
+
+            0%,
+            90%,
+            100% {
+                transform: translateX(0);
+            }
+
+            91% {
+                transform: translateX(-8px);
+            }
+
+            92% {
+                transform: translateX(6px);
+            }
+
+            93% {
+                transform: translateX(-4px);
+            }
+
+            94% {
+                transform: translateX(0);
+            }
+        }
+
+        #title-sub {
+            font-size: 1.1em;
+            color: #888;
+            letter-spacing: 8px;
+            margin-top: 15px;
+        }
+
+        #title-depth {
+            font-size: 0.9em;
+            color: #ff4444;
+            letter-spacing: 4px;
+            margin-top: 8px;
+            opacity: 0.7;
+        }
+
+        #title-start {
+            margin-top: 40px;
+            padding: 12px 35px;
+            background: transparent;
+            border: 2px solid #3a1a1a;
+            color: #cc6666;
+            font-family: inherit;
+            font-size: 1.1em;
+            letter-spacing: 3px;
+            cursor: pointer;
+            transition: all 0.4s;
+        }
+
+        #title-start:hover {
+            border-color: #8b0000;
+            color: #ff4444;
+            box-shadow: 0 0 25px rgba(139, 0, 0, 0.4);
+            background: rgba(139, 0, 0, 0.08);
+        }
+
+        #ending-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 300;
+            pointer-events: auto;
+            text-align: center;
+            padding: 40px;
+        }
+
+        #ending-title {
+            font-size: 2.5em;
+            color: var(--blood-bright);
+            letter-spacing: 5px;
+            text-shadow: 0 0 40px rgba(200, 0, 0, 0.7);
+            margin-bottom: 20px;
+        }
+
+        #ending-text {
+            color: #999;
+            font-size: 0.9em;
+            line-height: 1.8;
+            max-width: 500px;
+        }
+
+        #ending-restart {
+            margin-top: 30px;
+            padding: 10px 28px;
+            background: transparent;
+            border: 2px solid #3a1a1a;
+            color: #cc6666;
+            font-family: inherit;
+            font-size: 0.9em;
+            letter-spacing: 3px;
+            cursor: pointer;
+        }
+
+        #ending-restart:hover {
+            border-color: #8b0000;
+            color: #ff4444;
+        }
+
+        .shake {
+            animation: shake 0.5s ease-in-out;
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translate(0);
+            }
+
+            10% {
+                transform: translate(-5px, 3px);
+            }
+
+            20% {
+                transform: translate(6px, -2px);
+            }
+
+            30% {
+                transform: translate(-4px, -4px);
+            }
+
+            40% {
+                transform: translate(3px, 5px);
+            }
+
+            50% {
+                transform: translate(-6px, -1px);
+            }
+
+            60% {
+                transform: translate(5px, 2px);
+            }
+
+            70% {
+                transform: translate(-2px, -5px);
+            }
+
+            80% {
+                transform: translate(4px, 4px);
+            }
+
+            90% {
+                transform: translate(-3px, -2px);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="game-wrapper">
+        <canvas id="game-canvas"></canvas>
+        <div id="ui-layer">
+            <div id="scanlines"></div>
+            <div id="vignette"></div>
+            <div id="blood-overlay"></div>
+            <div id="glitch-overlay"></div>
+            <div id="crosshair"></div>
+            <div id="room-label">CÂMARA DE DESPERTAR</div>
+            <div id="hud">
+                <span>SANIDADE</span>
+                <div id="sanity-bar-outer">
+                    <div id="sanity-bar-inner" style="width:100%"></div>
+                </div>
+                <span id="sanity-value">100</span>
+            </div>
+            <div id="action-panel">
+                <div id="room-description"></div>
+                <div id="room-actions"></div>
+            </div>
+            <div id="inventory-bar">
+                <span class="inv-slot" data-slot="0">vazio</span>
+                <span class="inv-slot" data-slot="1">vazio</span>
+                <span class="inv-slot" data-slot="2">vazio</span>
+                <span class="inv-slot" data-slot="3">vazio</span>
+                <span class="inv-slot" data-slot="4">vazio</span>
+            </div>
+            <div id="log-button" onclick="toggleLogModal()">📋 LOGS</div>
+            <canvas id="minimap" width="150" height="150"></canvas>
+            <div id="log-modal" style="display:none;">
+                <h3>📋 LOGS RECUPERADOS</h3>
+                <div id="log-list"></div>
+                <div id="log-content-display">Selecione um log para ler...</div>
+                <button id="log-close" onclick="toggleLogModal()">FECHAR</button>
+            </div>
+        </div>
+        <div id="title-screen">
+            <div id="title-glitch">H A D A L</div>
+            <div id="title-sub">ESTAÇÃO ABISSOPELÁGICA</div>
+            <div id="title-depth">PROFUNDIDADE: 4.500m | PROJETO CARCINIZAÇÃO</div>
+            <button id="title-start" onclick="startGame()">I N I C I A R</button>
+        </div>
+        <div id="ending-screen" style="display:none;">
+            <div id="ending-title"></div>
+            <div id="ending-text"></div>
+            <button id="ending-restart" onclick="restartGame()">R E C O M E Ç A R</button>
+        </div>
+    </div>
+
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com/three@0.157.0/build/three.module.js" } }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // ==================== GAME STATE ====================
+        const gameState = {
+            currentRoom: 'wakeup',
+            sanity: 100,
+            inventory: [null, null, null, null, null],
+            logsFound: [],
+            logsRead: [],
+            visitedRooms: [],
+            gameOver: false,
+            ending: null,
+            fuseInserted: false,
+            escapeUnlocked: false,
+            parasiteReleased: false,
+        };
+
+        // ==================== AUDIO ====================
+        let audioCtx = null;
+        function initAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+        function playTone(f, d, t = 'sine', v = 0.08) {
+            if (!audioCtx) return;
+            try {
+                const o = audioCtx.createOscillator();
+                const g = audioCtx.createGain();
+                o.type = t;
+                o.frequency.setValueAtTime(f, audioCtx.currentTime);
+                g.gain.setValueAtTime(v, audioCtx.currentTime);
+                g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + d);
+                o.connect(g);
+                g.connect(audioCtx.destination);
+                o.start();
+                o.stop(audioCtx.currentTime + d);
+            } catch (e) { }
+        }
+        function playAmbient() {
+            if (!audioCtx) return;
+            const o = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            o.type = 'sawtooth';
+            o.frequency.setValueAtTime(35, audioCtx.currentTime);
+            o.frequency.linearRampToValueAtTime(38, audioCtx.currentTime + 4);
+            g.gain.setValueAtTime(0.02, audioCtx.currentTime);
+            o.connect(g);
+            g.connect(audioCtx.destination);
+            o.start();
+            o.stop(audioCtx.currentTime + 4);
+        }
+        function playJumpscare() {
+            for (let i = 0; i < 5; i++) setTimeout(() => playTone(80 + i * 30, 0.3, 'square', 0.15), i * 60);
+            playTone(40, 0.8, 'sawtooth', 0.2);
+        }
+        function playWhisper() {
+            if (!audioCtx) return;
+            const len = audioCtx.sampleRate * 0.6;
+            const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+            const d = buf.getChannelData(0);
+            for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * 0.04 * Math.exp(-i / (audioCtx.sampleRate * 0.3));
+            const s = audioCtx.createBufferSource();
+            s.buffer = buf;
+            const g = audioCtx.createGain();
+            g.gain.setValueAtTime(0.06, audioCtx.currentTime);
+            s.connect(g);
+            g.connect(audioCtx.destination);
+            s.start();
+        }
+
+        // ==================== UI HELPERS ====================
+        function $(id) { return document.getElementById(id); }
+        function updateSanityUI() {
+            const s = Math.max(0, Math.min(100, gameState.sanity));
+            $('sanity-bar-inner').style.width = s + '%';
+            $('sanity-value').textContent = s;
+        }
+        function changeSanity(amt) {
+            gameState.sanity = Math.max(0, Math.min(100, gameState.sanity + amt));
+            updateSanityUI();
+            if (gameState.sanity <= 0 && !gameState.gameOver) triggerEnding('madness');
+        }
+        function updateInventoryUI() {
+            document.querySelectorAll('.inv-slot').forEach((slot, i) => {
+                const item = gameState.inventory[i];
+                slot.textContent = item ? item.name : 'vazio';
+                slot.className = 'inv-slot' + (item ? ' filled' : '');
+                slot.title = item ? item.description : '';
+            });
+        }
+        function addItem(item) {
+            const idx = gameState.inventory.findIndex(s => !s);
+            if (idx !== -1) {
+                gameState.inventory[idx] = item;
+                updateInventoryUI(); return true;
+            }
+            return false;
+        }
+        function removeItem(name) {
+            const idx = gameState.inventory.findIndex(s => s && s.name === name);
+            if (idx !== -1) {
+                gameState.inventory[idx] = null;
+                updateInventoryUI(); return true;
+            }
+            return false;
+        }
+        function hasItem(name) { return gameState.inventory.some(s => s && s.name === name); }
+        function addLog(id) {
+            if (!gameState.logsFound.includes(id)) {
+                gameState.logsFound.push(id);
+                $('log-button').classList.add('has-new');
+                playTone(200, 0.3, 'sine', 0.05);
+            }
+        }
+        function readLog(id) {
+            if (!gameState.logsRead.includes(id)) {
+                gameState.logsRead.push(id);
+                if (gameState.logsFound.every(i => gameState.logsRead.includes(i))) $('log-button').classList.remove(
+                    'has-new');
+            }
+        }
+        function showBlood(intensity = 'normal') {
+            const ov = $('blood-overlay');
+            ov.classList.add('active');
+            if (intensity === 'intense') ov.classList.add('intense');
+            setTimeout(() => ov.classList.remove('active', 'intense'), intensity === 'intense' ? 3000 : 1500);
+        }
+        function triggerGlitch(dur = 300) {
+            $('glitch-overlay').classList.add('active');
+            setTimeout(() => $('glitch-overlay').classList.remove('active'), dur);
+        }
+        function shakeScreen() {
+            $('game-wrapper').classList.add('shake');
+            setTimeout(() => $('game-wrapper').classList.remove('shake'), 500);
+        }
+        function updateLogIndicator() {
+            const has = gameState.logsFound.some(id => !gameState.logsRead.includes(id));
+            if (has) $('log-button').classList.add('has-new');
+            else $('log-button').classList.remove('has-new');
+        }
+        window.toggleLogModal = function () {
+            const modal = $('log-modal');
+            if (modal.style.display === 'none') {
+                modal.style.display = 'flex';
+                const list = $('log-list');
+                list.innerHTML = '';
+                if (gameState.logsFound.length === 0) list.innerHTML =
+                    '<span style="color:#555;">Nenhum log...</span>';
+                else {
+                    [...gameState.logsFound].sort().forEach(id => {
+                        const d = LOGS_DATABASE[id];
+                        const e = document.createElement('div');
+                        e.className = 'log-entry' + (gameState.logsRead.includes(id) ? ' read' : '');
+                        e.textContent = d.title + (gameState.logsRead.includes(id) ? ' ✓' : ' ●');
+                        e.onclick = () => {
+                            readLog(id);
+                            $('log-content-display').textContent = d.content;
+                            updateLogIndicator();
+                            window.toggleLogModal();
+                        };
+                        list.appendChild(e);
+                    });
+                }
+                $('log-content-display').textContent = 'Selecione um log...';
+            } else modal.style.display = 'none';
+        };
+
+        // ==================== 3D ENGINE ====================
+        const canvas = $('game-canvas');
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.toneMapping = THREE.ReinhardToneMapping;
+        renderer.toneMappingExposure = 1.5;
+
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x050505, 0.01);
+
+        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 30);
+        camera.position.set(0, 1.5, 0);
+
+        const ambient = new THREE.AmbientLight(0x333333, 1.5);
+        scene.add(ambient);
+        const flicker = new THREE.PointLight(0x553333, 20, 12);
+        flicker.position.set(0, 2, 2);
+        flicker.castShadow = true;
+        scene.add(flicker);
+
+        const roomGroup = new THREE.Group();
+        scene.add(roomGroup);
+
+        const player = { height: 1.5, speed: 3.5, pos: new THREE.Vector3() };
+        const keys = {};
+        let mouseLocked = false;
+        const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+        const pitchObject = new THREE.Object3D();
+        pitchObject.add(camera);
+        scene.add(pitchObject);
+
+        canvas.addEventListener('click', () => {
+            if (!mouseLocked && gameState.currentRoom && !gameState.gameOver) canvas.requestPointerLock();
+        });
+        document.addEventListener('pointerlockchange', () => { mouseLocked = document.pointerLockElement === canvas; });
+        document.addEventListener('mousemove', (e) => {
+            if (mouseLocked) {
+                euler.setFromQuaternion(pitchObject.quaternion);
+                euler.y -= e.movementX * 0.002;
+                euler.x -= e.movementY * 0.002;
+                euler.x = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, euler.x));
+                pitchObject.quaternion.setFromEuler(euler);
+            }
+        });
+        window.addEventListener('keydown', e => {
+            keys[e.key.toLowerCase()] = true; if (e.key === 'e') interactWithObject
+                ();
+        });
+        window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+        const raycaster = new THREE.Raycaster();
+        raycaster.far = 3;
+
+        function interactWithObject() {
+            if (!gameState.currentRoom || gameState.gameOver) return;
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+            const intersects = raycaster.intersectObjects(roomGroup.children, true);
+            for (const inter of intersects) {
+                let obj = inter.object;
+                while (obj) {
+                    if (obj.userData && obj.userData.action) {
+                        const action = obj.userData.action;
+                        if (!action.condition || evalCondition(action.condition)) {
+                            executeAction(action);
+                            return;
+                        }
+                    }
+                    obj = obj.parent;
+                }
+            }
+        }
+
+        const roomBounds = {
+            'wakeup': { minX: -3, maxX: 3, minZ: -3, maxZ: 3 },
+            'corridor': { minX: -1.5, maxX: 1.5, minZ: -5, maxZ: 5 },
+            'lab': { minX: -3, maxX: 3, minZ: -3, maxZ: 3 },
+            'containment': { minX: -3, maxX: 3, minZ: -3, maxZ: 3 },
+            'control': { minX: -3, maxX: 3, minZ: -3, maxZ: 3 },
+            'parasite_chamber': { minX: -2.5, maxX: 2.5, minZ: -2.5, maxZ: 2.5 },
+            'escape': { minX: -2, maxX: 2, minZ: -2, maxZ: 2 },
+        };
+
+        function createInteractable(pos, action, color = 0x554444) {
+            const geom = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+            const mat = new THREE.MeshStandardMaterial({
+                color, emissive: 0x111111, roughness: 0.7, transparent: true,
+                opacity: 0.25
+            });
+            const obj = new THREE.Mesh(geom, mat);
+            obj.position.copy(pos);
+            obj.userData.action = action;
+            obj.castShadow = true;
+            obj.receiveShadow = true;
+            roomGroup.add(obj);
+            return obj;
+        }
+
+        function buildRoom(roomId) {
+            roomGroup.clear();
+            flicker.intensity = 8;
+            scene.fog.density = 0.03;
+            const mat = (c, e = 0x000000, r = 0.9) => new THREE.MeshStandardMaterial({
+                color: c, emissive: e, roughness: r,
+                metalness: 0.2
+            });
+            const addBox = (x, y, z, w, h, d, col = 0x1a1a1a) => {
+                const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(col, 0x050505, 0.95));
+                m.position.set(x, y, z);
+                m.castShadow = m.receiveShadow = true;
+                roomGroup.add(m);
+            };
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), mat(0x0a0a0a, 0, 0.98));
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.y = -1.2;
+            floor.receiveShadow = true;
+            roomGroup.add(floor);
+            const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), mat(0x080808));
+            ceiling.rotation.x = Math.PI / 2;
+            ceiling.position.y = 1.8;
+            roomGroup.add(ceiling);
+
+            const room = ROOMS[roomId];
+            const actions = [...(room.actions || [])];
+            if (room.conditionalActions) {
+                Object.entries(room.conditionalActions).forEach(([cond, acts]) => {
+                    if (evalCondition(cond)) actions.push(
+                        ...acts);
+                });
+            }
+
+            switch (roomId) {
+                case 'wakeup':
+                    addBox(0, 0.3, -3.5, 7, 2.2, 0.3, 0x1a1a1a);
+                    addBox(-3.6, 0.3, 0, 0.3, 2.2, 7, 0x1a1a1a);
+                    addBox(3.6, 0.3, 0, 0.3, 2.2, 7, 0x1a1a1a);
+                    const bed = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.15, 0.8), mat(0x222222));
+                    bed.position.set(0, -0.35, -1.5);
+                    roomGroup.add(bed);
+                    const stain = new THREE.Mesh(new THREE.CircleGeometry(0.4, 16), new THREE
+                        .MeshStandardMaterial({ color: 0x330000, roughness: 0.9, emissive: 0x110000 }));
+                    stain.rotation.x = -Math.PI / 2;
+                    stain.position.y = -1.15;
+                    roomGroup.add(stain);
+                    createInteractable(new THREE.Vector3(0, -0.1, -1.2), actions.find(a => a.label === 'Examinar ferimento'),
+                        0x553333);
+                    createInteractable(new THREE.Vector3(1.5, -0.5, -0.5), actions.find(a => a.label === 'Vasculhar quarto'),
+                        0x445533);
+                    createInteractable(new THREE.Vector3(0, 0, -2.8), {
+                        label: 'Forçar porta', sound: {
+                            freq: 60, dur: 0.5,
+                            type: 'square', vol: 0.1
+                        }, effect: 'shake', sanityChange: -3, condition: "hasItem('Pé-de-cabra')"
+                    },
+                        0x553333);
+                    flicker.intensity = 14;
+                    flicker.color.set(0x553333);
+                    break;
+                case 'corridor':
+                    addBox(0, 0.3, -5.5, 3.5, 2.2, 0.3, 0x111111);
+                    addBox(-1.85, 0.3, 0, 0.3, 2.2, 11, 0x111111);
+                    addBox(1.85, 0.3, 0, 0.3, 2.2, 11, 0x111111);
+                    createInteractable(new THREE.Vector3(-1.6, 0.5, -1), actions.find(a => a.label === 'Examinar marcas'),
+                        0x554444);
+                    createInteractable(new THREE.Vector3(0, 1.2, 2), actions.find(a => a.label === 'Ouvir'), 0x444455);
+                    createInteractable(new THREE.Vector3(-0.5, 0.5, 2.5), actions.find(a => a.label === 'Revistar armário'),
+                        0x555544);
+                    flicker.intensity = 10;
+                    scene.fog.density = 0.04;
+                    break;
+                case 'lab':
+                    addBox(0, 0.3, -3.5, 7, 2.2, 0.3);
+                    addBox(-3.6, 0.3, 0, 0.3, 2.2, 7);
+                    addBox(3.6, 0.3, 0, 0.3, 2.2, 7);
+                    const tankGeo = new THREE.CylinderGeometry(0.3, 0.35, 1.2, 8);
+                    const tank = new THREE.Mesh(tankGeo, mat(0x112211, 0x002200, 0.4));
+                    tank.position.set(-1.2, -0.2, -1.5);
+                    roomGroup.add(tank);
+                    const tank2 = tank.clone();
+                    tank2.position.set(1.2, -0.2, -1.5);
+                    roomGroup.add(tank2);
+                    createInteractable(new THREE.Vector3(-1.2, 0.6, -1.5), actions.find(a => a.label === 'Examinar tanque'),
+                        0x335533);
+                    createInteractable(new THREE.Vector3(1.2, 0.6, -1.5), actions.find(a => a.label === 'Coletar amostra'),
+                        0x553333);
+                    createInteractable(new THREE.Vector3(0, 0.3, -0.5), actions.find(a => a.label === 'Ler documentos'),
+                        0x444444);
+                    createInteractable(new THREE.Vector3(2, -0.5, 1.5), actions.find(a => a.label ===
+                        'Procurar equipamentos'), 0x555544);
+                    flicker.intensity = 12;
+                    flicker.color.set(0x332211);
+                    break;
+                case 'containment':
+                    addBox(0, 0.3, -3.5, 7, 2.2, 0.3);
+                    addBox(-3.6, 0.3, 0, 0.3, 2.2, 7);
+                    addBox(3.6, 0.3, 0, 0.3, 2.2, 7);
+                    createInteractable(new THREE.Vector3(-1, 0.6, -1.8), actions.find(a => a.label === 'Observar espécimes'),
+                        0x553333);
+                    createInteractable(new THREE.Vector3(1.5, -0.5, 1), actions.find(a => a.label ===
+                        'Procurar suprimentos'), 0x445533);
+                    createInteractable(new THREE.Vector3(2, 0.2, -0.5), actions.find(a => a.label ===
+                        'Usar kit (+20 sanidade)'), 0x335555);
+                    flicker.intensity = 8;
+                    scene.fog.density = 0.06;
+                    break;
+                case 'control':
+                    addBox(0, 0.3, -3.5, 7, 2.2, 0.3);
+                    addBox(-3.6, 0.3, 0, 0.3, 2.2, 7);
+                    addBox(3.6, 0.3, 0, 0.3, 2.2, 7);
+                    const cons = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.6, 0.6), mat(0x111122, 0x000011, 0.5));
+                    cons.position.set(0, -0.1, -1.5);
+                    roomGroup.add(cons);
+                    createInteractable(new THREE.Vector3(0, 0.3, -1.2), actions.find(a => a.label === 'Tentar ativar'),
+                        0x333355);
+                    createInteractable(new THREE.Vector3(0.8, 0.5, -0.8), actions.find(a => a.label === 'Ler logs'), 0x444455);
+                    createInteractable(new THREE.Vector3(0, -0.2, -1.8), actions.find(a => a.label === 'Inserir fusível'),
+                        0x555533);
+                    flicker.intensity = 12;
+                    flicker.color.set(0x222244);
+                    break;
+                case 'parasite_chamber':
+                    const mass = new THREE.Mesh(new THREE.SphereGeometry(1.2, 32, 32), new THREE
+                        .MeshStandardMaterial({ color: 0x330000, roughness: 0.2, emissive: 0x440000 }));
+                    mass.position.set(0, -0.2, -1.2);
+                    roomGroup.add(mass);
+                    createInteractable(new THREE.Vector3(0, 0.8, -1.2), actions.find(a => a.label === 'Oferecer amostra'),
+                        0x553333);
+                    createInteractable(new THREE.Vector3(0.5, 0.8, -1.2), actions.find(a => a.label ===
+                        'Aceitar transformação'), 0x553333);
+                    createInteractable(new THREE.Vector3(-0.5, 0.8, -1.2), actions.find(a => a.label === 'Resistir e fugir'),
+                        0x444444);
+                    flicker.intensity = 5;
+                    flicker.color.set(0x330000);
+                    scene.fog.density = 0.08;
+                    break;
+                case 'escape':
+                    addBox(0, 0.3, -2.5, 5, 2.2, 0.3);
+                    addBox(-2.6, 0.3, 0, 0.3, 2.2, 5);
+                    addBox(2.6, 0.3, 0, 0.3, 2.2, 5);
+                    const pod = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.7, 2, 16), mat(0x181830, 0x000022,
+                        0.4));
+                    pod.position.set(0, 0.2, -0.8);
+                    roomGroup.add(pod);
+                    createInteractable(new THREE.Vector3(0, 0.5, -1.5), actions.find(a => a.label === 'Lançar cápsula'),
+                        0x333355);
+                    createInteractable(new THREE.Vector3(1.2, 0.2, 0.5), actions.find(a => a.label === 'Destruir painel'),
+                        0x553333);
+                    flicker.intensity = 12;
+                    flicker.color.set(0x222244);
+                    break;
+            }
+
+            const navs = ROOMS[roomId].navigation || [];
+            navs.forEach(nav => {
+                if (nav.exitPos) {
+                    const exitGeom = new THREE.BoxGeometry(1.2, 2, 0.5);
+                    const exitMat = new THREE.MeshStandardMaterial({ color: 0x000000, transparent: true, opacity: 0.0 });
+                    const exitObj = new THREE.Mesh(exitGeom, exitMat);
+                    exitObj.position.copy(nav.exitPos);
+                    exitObj.userData = { exit: nav.target, condition: nav.condition };
+                    roomGroup.add(exitObj);
+                }
+            });
+        }
+
+        function evalCondition(cond) {
+            if (!cond) return true;
+            try { const s = gameState; return eval(cond); } catch (e) { return false; }
+        }
+
+        function executeAction(action) {
+            if (action.condition && !evalCondition(action.condition)) return;
+            initAudio();
+            if (action.effect === 'blood') showBlood();
+            if (action.effect === 'blood_intense') showBlood('intense');
+            if (action.effect === 'glitch') triggerGlitch();
+            if (action.effect === 'shake') shakeScreen();
+            if (action.effect === 'jumpscare') {
+                playJumpscare();
+                showBlood('intense');
+                triggerGlitch(600);
+                shakeScreen();
+                changeSanity(-15);
+            }
+            if (action.effect === 'whisper') playWhisper();
+            if (action.sound) playTone(action.sound.freq, action.sound.dur, action.sound.type || 'sine', action.sound.vol ||
+                0.08);
+            if (action.sanityChange) changeSanity(action.sanityChange);
+            if (action.addLog) addLog(action.addLog);
+            if (action.addItem && ITEMS[action.addItem]) { if (addItem(ITEMS[action.addItem])) playTone(440, 0.2); }
+            if (action.removeItem) removeItem(action.removeItem);
+            if (action.setFlag) gameState[action.setFlag] = true;
+            if (action.handler) action.handler();
+            if (action.triggerEnding) setTimeout(() => triggerEnding(action.triggerEnding), 800);
+            refreshRoomUI();
+            updateInventoryUI();
+            updateSanityUI();
+            updateLogIndicator();
+            drawMinimap();
+        }
+
+        function refreshRoomUI() {
+            const room = ROOMS[gameState.currentRoom];
+            $('room-label').textContent = room.name;
+            let desc = room.description;
+            if (room.conditionalText) {
+                Object.entries(room.conditionalText).forEach(([cond, txt]) => {
+                    if (evalCondition(cond)) desc += '\n\n' +
+                        txt;
+                });
+            }
+            $('room-description').innerHTML = desc.replace(/\n/g, '<br>');
+            const actionsDiv = $('room-actions');
+            actionsDiv.innerHTML = '';
+            const actions = [...(room.actions || [])];
+            if (room.conditionalActions) {
+                Object.entries(room.conditionalActions).forEach(([cond, acts]) => {
+                    if (evalCondition(cond)) actions.push(
+                        ...acts);
+                });
+            }
+            actions.forEach(a => {
+                const btn = document.createElement('button');
+                btn.className = 'action-btn';
+                if (a.danger) btn.className += ' danger';
+                if (a.condition && !evalCondition(a.condition)) {
+                    btn.className += ' disabled';
+                    btn.textContent = a.label + ' (indisponível)';
+                } else {
+                    btn.textContent = a.label;
+                    btn.onclick = () => executeAction(a);
+                }
+                actionsDiv.appendChild(btn);
+            });
+        }
+
+        function enterRoom(roomId) {
+            if (gameState.gameOver) return;
+            gameState.currentRoom = roomId;
+            if (!gameState.visitedRooms.includes(roomId)) gameState.visitedRooms.push(roomId);
+            buildRoom(roomId);
+            const room = ROOMS[roomId];
+            if (room.playerStart) {
+                player.pos.copy(room.playerStart);
+                pitchObject.position.copy(player.pos);
+                pitchObject.position.y += player.height;
+            }
+            refreshRoomUI();
+            updateLogIndicator();
+            drawMinimap();
+            if (room.onEnter) room.onEnter();
+            if (Math.random() < (room.sanityDrain || 0)) changeSanity(-3);
+            if (Math.random() < 0.4) playAmbient();
+        }
+
+        function triggerEnding(endingId) {
+            if (gameState.gameOver) return;
+            gameState.gameOver = true;
+            const e = ENDINGS[endingId];
+            $('ending-title').textContent = e.title;
+            $('ending-text').textContent = e.text;
+            $('ending-screen').style.display = 'flex';
+            showBlood(e.bloodIntensity || 'normal');
+            if (e.sound) playTone(e.sound.freq, e.sound.dur, e.sound.type, e.sound.vol);
+            if (e.glitch) triggerGlitch(e.glitch);
+            document.exitPointerLock();
+        }
+
+        // Minimap
+        const minimapCanvas = $('minimap');
+        const minimapCtx = minimapCanvas.getContext('2d');
+        const roomPositions = {
+            'wakeup': { x: 75, y: 100 },
+            'corridor': { x: 75, y: 55 },
+            'lab': { x: 30, y: 55 },
+            'containment': { x: 120, y: 55 },
+            'control': { x: 75, y: 10 },
+            'parasite_chamber': { x: 120, y: 10 },
+            'escape': { x: 30, y: 10 },
+        };
+        const connections = [
+            ['wakeup', 'corridor'],
+            ['corridor', 'lab'],
+            ['corridor', 'containment'],
+            ['corridor', 'control'],
+            ['corridor', 'escape'],
+            ['corridor', 'parasite_chamber'],
+        ];
+
+        function drawMinimap() {
+            minimapCtx.clearRect(0, 0, 150, 150);
+            minimapCtx.fillStyle = '#111';
+            minimapCtx.fillRect(0, 0, 150, 150);
+            minimapCtx.strokeStyle = '#333';
+            minimapCtx.lineWidth = 1;
+            connections.forEach(([a, b]) => {
+                const pa = roomPositions[a],
+                    pb = roomPositions[b];
+                if (gameState.visitedRooms.includes(a) || gameState.visitedRooms.includes(b)) {
+                    minimapCtx.beginPath();
+                    minimapCtx.moveTo(pa.x, pa.y);
+                    minimapCtx.lineTo(pb.x, pb.y);
+                    minimapCtx.strokeStyle = '#555';
+                    minimapCtx.stroke();
+                }
+            });
+            Object.entries(roomPositions).forEach(([id, pos]) => {
+                if (gameState.visitedRooms.includes(id)) {
+                    minimapCtx.fillStyle = id === gameState.currentRoom ? '#cc4444' : '#333';
+                    minimapCtx.beginPath();
+                    minimapCtx.arc(pos.x, pos.y, 5, 0, Math.PI * 2);
+                    minimapCtx.fill();
+                }
+            });
+        }
+
+        // ==================== GAME DATA ====================
+        const ITEMS = {
+            crowbar: { name: 'Pé-de-cabra', description: 'Ferramenta de metal enferrujada.' },
+            keycard: { name: 'Cartão de Acesso', description: 'Cartão magnético manchado de sangue.' },
+            sample: { name: 'Amostra do Parasita', description: 'Frasco com tecido pulsante.' },
+            medkit: { name: 'Kit Médico', description: 'Ataduras e sedativo forte.' },
+            fuse: { name: 'Fusível', description: 'Fusível industrial 60A.' },
+        };
+        const LOGS_DATABASE = {
+            'log_sokolova_1': {
+                title: 'Registro Sokolova #1',
+                content: 'Dra. Elena Sokolova, 14/03. Encontramos algo na Fossa de Porto Rico. Uma estrutura biológica que não deveria existir a 4.500 metros. O organismo — provisoriamente chamado Cancriomorpha hadalis — reescreve tecido orgânico. Em testes preliminares com peixes, observamos reorganização óssea completa em 72 horas. Os espécimes... se tornaram algo parecido com crustáceos. Notável. Precisamos de amostras humanas.'
+            },
+            'log_sokolova_2': {
+                title: 'Registro Sokolova #4',
+                content: 'O parasita é mais agressivo do que antecipamos. O Tecnico Chen se expôs acidentalmente durante a extração. Em 6 horas, seus dedos começaram a se fundir. Em 12, seus braços estavam se dobrando para trás nas articulações. Ele ainda está consciente. Ele implora para morrer, mas seus olhos... já são quatro agora. A transformação é dolorosa mas belíssima. A natureza sempre encontra o caranguejo.'
+            },
+            'log_reyes': {
+                title: 'Registro Reyes',
+                content: 'Dr. Marcus Reyes, cirurgião. Hoje realizei a 7ª "extração assistida". O paciente (voluntário #12) gritou durante todo o procedimento mesmo sob anestesia geral. O parasita parece manter os centros de dor ativos. Removemos 3 kg de massa quitinosa do tórax. O coração do paciente já estava parcialmente envolvido por uma carapaça. Nota: descartar restos no incinerador. Não no mar.'
+            },
+            'log_park': {
+                title: 'Registro Park',
+                content: 'Técnico J. Park. Eu tentei. Cortei os cabos do sistema de contenção principal. Destruí as amostras que pude. Mas é tarde demais — os transformados já são dezenas. Eles nos mantêm aqui. Sokolova está obcecada. Ela injetou o parasita em si mesma "para entender". Eu vi o que saiu do laboratório dela ontem à noite. Não era mais humana. Se alguém encontrar isso: DESTRUAM A ESTAÇÃO. Não deixem nada subir.'
+            },
+            'log_distress': {
+                title: 'Sinal de Socorro',
+                content: 'MAYDAY MAYDAY — Estação Hadal para qualquer unidade de superfície. O Projeto Carcinização está fora de controle. Repito: contenção perdida. A Dra. Sokolova iniciou a Fase Final. Os espécimes estão se fundindo em algo maior no casco externo. Algo está crescendo. Algo está nos chamando das profundezas. Não tentem resgate. NÃO TENTEM RESGATE. Cortem os cabos do elevador. Afundem a estação. — Fim da transmissão.'
+            },
+        };
+        const ROOMS = {
+            'wakeup': {
+                name: 'CÂMARA DE DESPERTAR',
+                description: 'Você acorda em uma maca fria. O ar cheira a ozônio e algo podre. Luzes de emergência piscam em um ritmo irregular, lançando sombras que parecem se mover. Sua cabeça dói — há sangue seco em suas têmporas. O relógio na parede está parado em 03:47. Há quanto tempo você está aqui?\n\n<span class="highlight">Algo está errado. A estação está silenciosa demais.</span>',
+                actions: [
+                    {
+                        label: 'Examinar ferimento', effect: 'blood', sanityChange: -2,
+                        handler: () => { alert('Você toca sua cabeça. Os dedos encontram uma cicatriz irregular — como se algo tivesse sido inserido sob sua pele. Lateja.'); }
+                    },
+                    { label: 'Vasculhar quarto', handler: () => { addLog('log_distress'); if (!hasItem('Pé-de-cabra')) addItem(ITEMS['crowbar']); } },
+                ],
+                conditionalActions: {
+                    "hasItem('Pé-de-cabra')": [{
+                        label: 'Forçar porta', sound: { freq: 60, dur: 0.5, type: 'square', vol: 0.1 }, effect: 'shake', sanityChange: -3,
+                        handler: () => { alert('A porta range e cede. O corredor além está escuro e úmido.'); }
+                    }],
+                },
+                navigation: [
+                    { label: 'Corredor', target: 'corridor', condition: "hasItem('Pé-de-cabra')", exitPos: new THREE.Vector3(0, 0, -3.2) },
+                ],
+                playerStart: new THREE.Vector3(0, 0, 0),
+                sanityDrain: 0.1,
+            },
+            'corridor': {
+                name: 'CORREDOR PRINCIPAL',
+                description: 'O corredor é estreito, com paredes de metal cobertas por uma película úmida e escura. As luzes piscam intermitentemente. Há marcas de arranhões nas paredes — profundas, como se feitas por garras. O chão está pegajoso.\n\n<span class="highlight">Você ouve um som distante: algo se arrastando nos dutos de ventilação.</span>',
+                actions: [
+                    {
+                        label: 'Examinar marcas', sanityChange: -3, effect: 'blood',
+                        handler: () => { alert('As marcas são recentes. Há pedaços de unhas humanas incrustados no metal. Alguém tentou escalar as paredes.'); }
+                    },
+                    {
+                        label: 'Ouvir', effect: 'whisper', sanityChange: -4,
+                        handler: () => { alert('Você ouve... sussurros. Várias vozes sobrepostas, como se dezenas de pessoas estivessem murmurando em uníssono. Elas vêm dos dutos.'); }
+                    },
+                ],
+                conditionalActions: {
+                    "!hasItem('Cartão de Acesso')": [{
+                        label: 'Revistar armário', handler: () => {
+                            addLog('log_park');
+                            addItem(ITEMS['keycard']);
+                        }
+                    }],
+                },
+                navigation: [
+                    { label: 'Câmara', target: 'wakeup', exitPos: new THREE.Vector3(0, 0, 4.5) },
+                    { label: 'Laboratório', target: 'lab', condition: "hasItem('Cartão de Acesso')", exitPos: new THREE.Vector3(-1.5, 0, -2) },
+                    { label: 'Contenção', target: 'containment', condition: "hasItem('Cartão de Acesso')", exitPos: new THREE.Vector3(1.5, 0, -2) },
+                    { label: 'Controle', target: 'control', exitPos: new THREE.Vector3(0, 0, -4.5) },
+                    { label: 'Câmara Parasita', target: 'parasite_chamber', condition: "gameState.fuseInserted && hasItem('Amostra do Parasita')", exitPos: new THREE.Vector3(1.5, 0, 3) },
+                    { label: 'Escape', target: 'escape', condition: "gameState.escapeUnlocked", exitPos: new THREE.Vector3(-1.5, 0, 3) },
+                ],
+                playerStart: new THREE.Vector3(0, 0, 3),
+                sanityDrain: 0.2,
+            },
+            'lab': {
+                name: 'LABORATÓRIO',
+                description: 'O laboratório está em desordem. Vidros quebrados, papéis espalhados, e um odor químico adocicado — como carne queimada misturada com formol. Há tanques de vidro ao longo das paredes, a maioria quebrados. Um deles ainda contém algo.\n\n<span class="highlight">Dentro do tanque intacto, uma massa de tecido pulsa lentamente, emitindo uma luz âmbar fraca.</span>',
+                actions: [
+                    { label: 'Examinar tanque', effect: 'blood_intense', sanityChange: -8, handler: () => { addLog('log_sokolova_1'); alert('O tecido dentro do tanque se move. Você vê o que parecem ser olhos humanos — múltiplos — espalhados pela massa. Um deles pisca. O parasita está vivo.'); } },
+                    { label: 'Coletar amostra', danger: true, effect: 'blood_intense', sanityChange: -10, condition: "!hasItem('Amostra do Parasita')", handler: () => { addItem(ITEMS['sample']); alert('Você usa uma seringa para extrair uma amostra. O tecido se contorce ao ser perfurado. Você jura ter ouvido um gemido.'); } },
+                    { label: 'Ler documentos', handler: () => { addLog('log_sokolova_2'); alert('Registros detalham experimentos em "voluntários". Fotos mostram corpos com membros reorganizados em formas de caranguejo. A Dra. Sokolova assina todos.'); } },
+                ],
+                conditionalActions: {
+                    "hasItem('Amostra do Parasita') && !hasItem('Fusível')": [{ label: 'Procurar equipamentos', handler: () => { addItem(ITEMS['fuse']); alert('Você encontra um fusível de 60A em uma gaveta. Alguém o removeu do painel principal.'); } }],
+                },
+                navigation: [{ label: 'Corredor', target: 'corridor', exitPos: new THREE.Vector3(0, 0, 3.2) }],
+                playerStart: new THREE.Vector3(0, 0, 2),
+                sanityDrain: 0.3,
+            },
+            'containment': {
+                name: 'SALA DE CONTENÇÃO',
+                description: 'A sala de contenção é um pesadelo. Celas de vidro reforçado alinham as paredes. A maioria está vazia, mas três ainda contêm ocupantes — ou o que restou deles. Formas humanoides com braços que se dobram em ângulos impossíveis, dedos fundidos em pinças, olhos que brilham na escuridão.\n\n<span class="highlight">Um dos espécimes se vira para você. Ele ainda tem rosto. Está chorando.</span>',
+                actions: [
+                    { label: 'Observar espécimes', effect: 'blood_intense', sanityChange: -12, handler: () => { addLog('log_reyes'); alert('Você reconhece um dos transformados: é o Técnico Chen, da foto nos registros. Seus olhos — quatro agora — te seguem. Sua boca se move, formando palavras silenciosas: "me mata".'); } },
+                    { label: 'Procurar suprimentos', handler: () => { addItem(ITEMS['medkit']); alert('Em um armário, você encontra um kit médico com sedativos. Pode ajudar a acalmar os nervos.'); } },
+                ],
+                conditionalActions: {
+                    "hasItem('Kit Médico')": [{ label: 'Usar kit (+20 sanidade)', sanityChange: 20, handler: () => { removeItem('Kit Médico'); alert('Você aplica o sedativo. O tremor em suas mãos diminui. A realidade parece um pouco mais estável.'); } }],
+                },
+                navigation: [{ label: 'Corredor', target: 'corridor', exitPos: new THREE.Vector3(0, 0, 3.2) }],
+                playerStart: new THREE.Vector3(0, 0, 2),
+                sanityDrain: 0.4,
+            },
+            'control': {
+                name: 'SALA DE CONTROLE',
+                description: 'A sala de controle está parcialmente operacional. Monitores exibem estática. O painel principal mostra alertas: "CONTENÇÃO PERDIDA", "PROTOCOLO DE EMERGÊNCIA PENDENTE", "CÁPSULA DE ESCAPE: INATIVA".\n\n<span class="highlight">Há um slot para fusível vazio no painel. Alguém o removeu deliberadamente.</span>',
+                actions: [
+                    { label: 'Tentar ativar', handler: () => { alert('Sem o fusível, o painel não responde. A cápsula de escape está desativada.'); } },
+                    { label: 'Ler logs', handler: () => { addLog('log_distress'); alert('O último log registrado é um sinal de socorro. A transmissão foi interrompida abruptamente.'); } },
+                ],
+                conditionalActions: {
+                    "hasItem('Fusível') && !gameState.fuseInserted": [{ label: 'Inserir fusível', effect: 'glitch', handler: () => { gameState.fuseInserted = true; removeItem('Fusível'); gameState.escapeUnlocked = true; alert('O painel ganha vida. A cápsula de escape agora está ativa. Mas você precisa de uma amostra do parasita para passar pela trava de segurança biológica.'); } }],
+                },
+                navigation: [{ label: 'Corredor', target: 'corridor', exitPos: new THREE.Vector3(0, 0, 3.2) }],
+                playerStart: new THREE.Vector3(0, 0, 2),
+                sanityDrain: 0.15,
+            },
+            'parasite_chamber': {
+                name: 'CÂMARA DO PARASITA',
+                description: 'A câmara é dominada por uma massa orgânica colossal que pulsa no centro. O parasita-mãe cresceu além de qualquer contenção, suas veias se espalhando pelas paredes como raízes. O ar é espesso, quase líquido. Você sente a presença dele em sua mente — uma voz antiga, vinda das profundezas abissais.\n\n<span class="highlight">"JUNTE-SE A NÓS." A voz não usa palavras, mas você entende perfeitamente.</span>',
+                actions: [
+                    { label: 'Oferecer amostra', danger: true, effect: 'blood_intense', sanityChange: -30, handler: () => { gameState.parasiteReleased = true; alert('A massa se agita violentamente. A amostra é absorvida. O parasita-mãe emite um pulso bioluminescente que percorre toda a estação. Você sente algo se movendo dentro de você.'); } },
+                    { label: 'Aceitar transformação', danger: true, effect: 'jumpscare', sanityChange: -50, condition: 'gameState.parasiteReleased', triggerEnding: 'transformation' },
+                    { label: 'Resistir e fugir', sanityChange: -15, effect: 'shake', condition: 'gameState.parasiteReleased', handler: () => { alert('Com toda sua força de vontade, você se afasta da câmara. A voz em sua mente grita, mas você resiste.'); } },
+                ],
+                navigation: [{ label: 'Corredor', target: 'corridor', exitPos: new THREE.Vector3(0, 0, 2.8) }],
+                playerStart: new THREE.Vector3(0, 0, 2),
+                sanityDrain: 0.5,
+                onEnter: () => { playWhisper(); showBlood('intense'); changeSanity(-5); },
+            },
+            'escape': {
+                name: 'CÁPSULA DE ESCAPE',
+                description: 'A cápsula de escape está pronta. Luzes verdes indicam que os sistemas estão operacionais. É uma escotilha para a superfície — para longe deste pesadelo. Mas você sente algo. Algo dentro de você, se movendo, se reorganizando.\n\n<span class="highlight">O parasita já está em você. Escapar significa levá-lo à superfície.</span>',
+                actions: [
+                    { label: 'Lançar cápsula', effect: 'glitch', sanityChange: -10, triggerEnding: 'escape' },
+                    { label: 'Destruir painel', danger: true, effect: 'shake', sanityChange: -5, triggerEnding: 'sacrifice' },
+                ],
+                navigation: [{ label: 'Corredor', target: 'corridor', exitPos: new THREE.Vector3(0, 0, 2.5) }],
+                playerStart: new THREE.Vector3(0, 0, 1.8),
+                sanityDrain: 0.2,
+            },
+        };
+        const ENDINGS = {
+            'escape': { title: 'FUGA', text: 'A cápsula dispara em direção à superfície. Você sobreviveu. Mas enquanto a luz do sol começa a filtrar pela vigia, você sente seus dedos se curvarem involuntariamente. Sua pele nas costas está ficando mais dura. O parasita veio com você. Em poucas semanas, a superfície conhecerá o que as profundezas esconderam por milênios. Você foi a praga que subiu.', bloodIntensity: 'intense', sound: { freq: 30, dur: 3, type: 'sawtooth', vol: 0.15 }, glitch: 800 },
+            'transformation': { title: 'TRANSFORMAÇÃO', text: 'Você se entrega. A dor é inimaginável enquanto seus ossos se quebram e se reorganizam. Sua mandíbula se divide. Seus olhos se multiplicam. Mas junto com a dor vem uma paz estranha — uma compreensão. O caranguejo é a forma perfeita. A natureza sempre soube. Agora você também sabe. Você rasteja de volta às profundezas, para se juntar ao coro de vozes que cantam nas fossas abissais.', bloodIntensity: 'intense', sound: { freq: 20, dur: 4, type: 'sawtooth', vol: 0.25 }, glitch: 1200 },
+            'sacrifice': { title: 'SACRIFÍCIO', text: 'Você destrói o painel. A estação inteira começa a implodir. Alarmes soam, mas você não se importa mais. As profundezas reivindicarão a Estação Hadal e todos os seus segredos. O parasita-mãe será esmagado pela pressão. Você será esmagado também. Mas nada subirá à superfície. No seu último momento de consciência, você sorri. Foi a escolha certa.', bloodIntensity: 'intense', sound: { freq: 15, dur: 5, type: 'sine', vol: 0.2 }, glitch: 1500 },
+            'madness': { title: 'LOUCURA', text: 'Sua mente se quebra como vidro. As vozes nos dutos se tornam insuportáveis. Você vagueia pelos corredores da Estação Hadal, rindo e chorando, incapaz de distinguir realidade de delírio. Os transformados te aceitam como um deles agora — não de corpo, mas de espírito. Você passa a eternidade nos corredores escuros, sussurrando para as paredes, para sempre.', bloodIntensity: 'normal', sound: { freq: 50, dur: 2, type: 'square', vol: 0.1 }, glitch: 600 },
+        };
+
+        // ==================== GAME LOOP ====================
+        let lastTime = performance.now() * 0.001;
+        function update() {
+            const now = performance.now() * 0.001;
+            let delta = now - lastTime;
+            lastTime = now;
+            if (delta > 0.1) delta = 0.1;
+            if (delta <= 0) return;
+
+            if (gameState.gameOver || !gameState.currentRoom) return;
+            const moveSpeed = player.speed * delta;
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(pitchObject.quaternion);
+            const right = new THREE.Vector3(1, 0, 0).applyQuaternion(pitchObject.quaternion);
+            const moveDir = new THREE.Vector3();
+            if (keys['w']) moveDir.add(forward);
+            if (keys['s']) moveDir.sub(forward);
+            if (keys['a']) moveDir.sub(right);
+            if (keys['d']) moveDir.add(right);
+            if (moveDir.length() > 0) moveDir.normalize();
+            const newPos = player.pos.clone().add(moveDir.multiplyScalar(moveSpeed));
+            const bounds = roomBounds[gameState.currentRoom];
+            if (bounds) {
+                newPos.x = Math.max(bounds.minX + 0.3, Math.min(bounds.maxX - 0.3, newPos.x));
+                newPos.z = Math.max(bounds.minZ + 0.3, Math.min(bounds.maxZ - 0.3, newPos.z));
+            }
+            player.pos.copy(newPos);
+            pitchObject.position.copy(player.pos);
+            pitchObject.position.y += player.height;
+
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+            const intersects = raycaster.intersectObjects(roomGroup.children, true);
+            let foundInteractive = false;
+            for (const inter of intersects) {
+                let obj = inter.object;
+                while (obj) {
+                    if (obj.userData && (obj.userData.action || obj.userData.exit)) { foundInteractive = true; break; }
+                    obj = obj.parent;
+                }
+                if (foundInteractive) break;
+            }
+            const crosshair = document.getElementById('crosshair');
+            if (foundInteractive) crosshair.classList.add('interactive');
+            else crosshair.classList.remove('interactive');
+
+            for (const inter of intersects) {
+                let obj = inter.object;
+                while (obj) {
+                    if (obj.userData && obj.userData.exit && inter.distance < 1.5) {
+                        const exit = obj.userData;
+                        if (!exit.condition || evalCondition(exit.condition)) { enterRoom(exit.exit); return; }
+                    }
+                    obj = obj.parent;
+                }
+            }
+            flicker.intensity = 12 + 6 * Math.sin(now * 3) * Math.sin(now * 5);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // ==================== START / RESTART ====================
+        window.startGame = function () {
+            initAudio();
+            $('title-screen').style.display = 'none';
+            $('ending-screen').style.display = 'none';
+            gameState.currentRoom = null;
+            gameState.sanity = 100;
+            gameState.inventory = [null, null, null, null, null];
+            gameState.logsFound = [];
+            gameState.logsRead = [];
+            gameState.visitedRooms = [];
+            gameState.gameOver = false;
+            gameState.fuseInserted = false;
+            gameState.escapeUnlocked = false;
+            gameState.parasiteReleased = false;
+            updateSanityUI();
+            updateInventoryUI();
+            $('blood-overlay').classList.remove('active', 'intense');
+            $('glitch-overlay').classList.remove('active');
+            $('log-button').classList.remove('has-new');
+            $('log-modal').style.display = 'none';
+            enterRoom('wakeup');
+            canvas.requestPointerLock();
+            playAmbient();
+        };
+        window.restartGame = window.startGame;
+
+        $('ending-screen').style.display = 'none';
+        drawMinimap();
+        console.log('🦀 HADAL 3D carregado. WASD + mouse para explorar, E para interagir. Clique para travar mouse.');
+    </script>
+</body>
+
+</html>
